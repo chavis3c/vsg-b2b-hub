@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tenant Directory — VSG B2B Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Plus Jakarta Sans', sans-serif; background: #F1F4FA; color: #1a2a4a; min-height: 100vh; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "primaryColor": "#157f6d",
+  "accentColor": "#F97316",
+  "perPage": 12,
+  "compactCards": true
+}/*EDITMODE-END*/;
+
+// ── Full tenant dataset (102 entries) ────────────────────────────────────
+const INDUSTRIES = ["Metal Processing","Plastic Packaging","Food Manufacturing","Garment & Textile",
+  "Industrial Chemicals","Shared Services","Waste Management","Metal Components","Food Packaging",
+  "Electronics","Rubber Products","Paper & Cardboard","Machinery","Auto Parts","Woodworking",
+  "Construction Materials","Pharmaceuticals","Agricultural Processing"];
+
+const ZONES = ["A","B","C","D"];
+const CAPS  = ["Supplier","Buyer","Service Provider"];
+
+function rng(seed) {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+}
+
+const TENANT_SEEDS = [
+  { name:"Viet Nam Steel Manufacturing",   industry:"Metal Processing",        zone:"A", lot:"24",  listings:12, tx:38, products:"Steel coils, metal sheets, structural fabrication",    cap:"Supplier",         active:true,  isNew:false },
+  { name:"Pacific Plastics Co.",           industry:"Plastic Packaging",       zone:"B", lot:"07",  listings:9,  tx:24, products:"HDPE/PP packaging, injection-moulded parts",           cap:"Supplier",         active:true,  isNew:false },
+  { name:"Golden Food Processing",         industry:"Food Manufacturing",      zone:"C", lot:"15",  listings:6,  tx:19, products:"Processed grains, dried foods, seasoning blends",      cap:"Buyer",            active:true,  isNew:false },
+  { name:"Sunrise Textile Mills",          industry:"Garment & Textile",       zone:"D", lot:"03",  listings:11, tx:31, products:"Woven fabric, garment cutting, dyeing services",       cap:"Supplier",         active:true,  isNew:false },
+  { name:"Dragon Chemical Industries",     industry:"Industrial Chemicals",    zone:"A", lot:"09",  listings:8,  tx:22, products:"Solvents, lubricants, industrial cleaning agents",     cap:"Supplier",         active:false, isNew:false },
+  { name:"Thai Hoa Logistics Services",    industry:"Shared Services",         zone:"B", lot:"01",  listings:3,  tx:88, products:"Forklift rental, cold storage, IP-wide delivery",     cap:"Service Provider", active:true,  isNew:false },
+  { name:"Green Tech Recycling",           industry:"Waste Management",        zone:"C", lot:"22",  listings:5,  tx:17, products:"Metal scrap, plastic regrind, cardboard baling",       cap:"Buyer",            active:true,  isNew:false },
+  { name:"Precision Parts Manufacturing", industry:"Metal Components",        zone:"A", lot:"31",  listings:14, tx:44, products:"CNC-machined parts, stamped brackets, tooling",        cap:"Supplier",         active:true,  isNew:false },
+  { name:"Fresh Pack Solutions",           industry:"Food Packaging",          zone:"D", lot:"18",  listings:7,  tx:21, products:"Vacuum packs, shrink film, laminated pouches",         cap:"Supplier",         active:true,  isNew:true  },
+  { name:"Minh Anh Electronics",           industry:"Electronics",             zone:"B", lot:"12",  listings:10, tx:28, products:"PCB assembly, wire harnesses, SMT components",         cap:"Supplier",         active:true,  isNew:false },
+  { name:"Hoang Long Rubber",              industry:"Rubber Products",         zone:"C", lot:"08",  listings:6,  tx:14, products:"Rubber seals, O-rings, conveyor belting",              cap:"Supplier",         active:false, isNew:false },
+  { name:"Tan Phat Paper Mill",            industry:"Paper & Cardboard",       zone:"D", lot:"27",  listings:4,  tx:11, products:"Corrugated sheets, carton boxes, kraft paper",         cap:"Supplier",         active:true,  isNew:false },
+  { name:"Truong Hai Machinery",           industry:"Machinery",               zone:"A", lot:"05",  listings:8,  tx:19, products:"Industrial conveyors, pumps, custom fabrication",      cap:"Service Provider", active:true,  isNew:true  },
+  { name:"An Phat Auto Parts",             industry:"Auto Parts",              zone:"B", lot:"34",  listings:13, tx:36, products:"Brake components, chassis brackets, pressed parts",    cap:"Supplier",         active:true,  isNew:false },
+  { name:"Nguyen Phat Woodworks",          industry:"Woodworking",             zone:"C", lot:"11",  listings:5,  tx:13, products:"MDF boards, plywood, furniture blanks",               cap:"Supplier",         active:false, isNew:false },
+  { name:"Vina Build Materials",           industry:"Construction Materials",  zone:"D", lot:"02",  listings:9,  tx:26, products:"Cement additives, rebar, wire mesh rolls",            cap:"Supplier",         active:true,  isNew:false },
+  { name:"Mekong Pharma Pack",             industry:"Pharmaceuticals",         zone:"A", lot:"16",  listings:3,  tx:9,  products:"Blister foil, HDPE bottles, tamper-evident caps",     cap:"Supplier",         active:true,  isNew:true  },
+  { name:"Hung Thinh Agri",                industry:"Agricultural Processing", zone:"B", lot:"20",  listings:7,  tx:18, products:"Rice bran, cassava starch, animal feed additives",    cap:"Supplier",         active:true,  isNew:false },
+];
+
+// Generate remaining 84 tenants programmatically
+const EXTRA_NAMES = [
+  "Nam Viet Casting","Gia Lai Metal Works","Bien Hoa Packaging","Thanh Cong Plastics","Phu My Steel",
+  "Dong Nai Textiles","Binh Duong Chemicals","Long An Logistics","Khanh Hoa Recycling","Quang Nam Parts",
+  "Ha Tinh Food Co.","Nghe An Electronics","Quang Binh Rubber","Thua Thien Paper","Da Nang Machinery",
+  "Hai Phong Auto","Ho Chi Minh Wood","Can Tho Build","Vinh Long Pharma","Soc Trang Agri",
+  "Tien Giang Cast","Bac Ninh Metal","Hung Yen Pack","Nam Dinh Plastic","Ha Nam Steel",
+  "Thai Binh Textile","Ninh Binh Chem","Thanh Hoa Logis","Nghe An Recycle","Ha Tinh Prec",
+  "Quang Tri Food","Hue Electronics","Da Nang Rubber","Quang Nam Paper","Binh Dinh Mach",
+  { name:"Phu Yen Auto" }, "Khanh Hoa Wood","Ninh Thuan Build","Binh Thuan Pharma","Lam Dong Agri",
+  "Dak Lak Cast","Dak Nong Metal","Gia Lai Pack","Kon Tum Plastic","Dak Lak Steel",
+  "Pleiku Textile","An Khe Chem","Buon Ma Thuot Log","Bao Loc Recycle","Da Lat Parts",
+  "Nha Trang Food","Cam Ranh Elec","Tuy Hoa Rubber","Quang Ngai Paper","Tam Ky Mach",
+  "Hoi An Auto","Hue Wood","Dong Ha Build","Vinh Pharma","Ha Tinh Agri",
+  "Nghe An Cast","Thanh Hoa Metal","Ninh Binh Pack","Nam Dinh Plastic 2","Ha Nam Steel 2",
+  "Hai Duong Textile","Hung Yen Chem","Bac Giang Log","Bac Ninh Recycle","Lang Son Parts",
+  "Cao Bang Food","Lao Cai Elec","Yen Bai Rubber","Hoa Binh Paper","Phu Tho Mach",
+  "Vinh Phuc Auto","Bac Can Wood","Thai Nguyen Build","Tuyen Quang Pharma","Ha Giang Agri",
+];
+
+const ALL_TENANTS = [...TENANT_SEEDS];
+const r = rng(42);
+EXTRA_NAMES.forEach((n, i) => {
+  const ind = INDUSTRIES[Math.floor(r() * INDUSTRIES.length)];
+  const zone = ZONES[Math.floor(r() * ZONES.length)];
+  const lot  = String(Math.floor(r() * 40) + 1).padStart(2,"0");
+  const listings = Math.floor(r() * 15) + 1;
+  const tx = Math.floor(r() * 50) + 2;
+  const cap = CAPS[Math.floor(r() * CAPS.length)];
+  const active = r() > 0.25;
+  const isNew  = r() > 0.8;
+  const name = typeof n === "string" ? n : n.name;
+  ALL_TENANTS.push({ name, industry: ind, zone, lot, listings, tx, products: "—", cap, active, isNew });
+});
+
+// ── Industry → color map ─────────────────────────────────────────────────
+const IND_COLOR = {
+  "Metal Processing":       { bg:"#DBEAFE", text:"#1E40AF" },
+  "Plastic Packaging":      { bg:"#EDE9FE", text:"#5B21B6" },
+  "Food Manufacturing":     { bg:"#D1FAE5", text:"#065F46" },
+  "Garment & Textile":      { bg:"#FCE7F3", text:"#831843" },
+  "Industrial Chemicals":   { bg:"#FEF3C7", text:"#92400E" },
+  "Shared Services":        { bg:"#CFFAFE", text:"#155E75" },
+  "Waste Management":       { bg:"#DCFCE7", text:"#14532D" },
+  "Metal Components":       { bg:"#E0F2FE", text:"#075985" },
+  "Food Packaging":         { bg:"#FEF9C3", text:"#713F12" },
+  "Electronics":            { bg:"#F0FDF4", text:"#166534" },
+  "Rubber Products":        { bg:"#FFF7ED", text:"#9A3412" },
+  "Paper & Cardboard":      { bg:"#F8FAFC", text:"#334155" },
+  "Machinery":              { bg:"#F1F5F9", text:"#475569" },
+  "Auto Parts":             { bg:"#FFF1F2", text:"#9F1239" },
+  "Woodworking":            { bg:"#FAFAF0", text:"#713F12" },
+  "Construction Materials": { bg:"#F8F8F8", text:"#374151" },
+  "Pharmaceuticals":        { bg:"#F0FDF4", text:"#166534" },
+  "Agricultural Processing":{ bg:"#ECFDF5", text:"#065F46" },
+};
+
+function initials(name) {
+  return name.split(" ").slice(0,2).map(w=>w[0]).join("").toUpperCase();
+}
+
+// Stable hue from name
+function logoHue(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+// ── Tenant Card ──────────────────────────────────────────────────────────
+function TenantCard({ t, primary, accent, compact }) {
+  const [hov, setHov] = useState(false);
+  const hue = logoHue(t.name);
+  const ic  = IND_COLOR[t.industry] || { bg:"#F1F4FA", text:"#374151" };
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        background: "white",
+        borderRadius: 16,
+        overflow: "hidden",
+        boxShadow: hov ? "0 16px 40px rgba(0,0,0,0.13)" : "0 2px 10px rgba(0,0,0,0.07)",
+        border: `1.5px solid ${hov ? primary : "#F1F4FA"}`,
+        transform: hov ? "translateY(-3px)" : "none",
+        transition: "all 0.2s ease",
+        display: "flex",
+        flexDirection: "column",
+        cursor: "pointer",
+        opacity: 1,
+      }}
+    >
+      {/* Card header stripe */}
+      <div style={{
+        height: compact ? 6 : 8,
+        background: `linear-gradient(90deg, hsl(${hue},55%,42%), hsl(${(hue+40)%360},55%,52%))`,
+      }}/>
+
+      <div style={{ padding: compact ? "14px 16px 16px" : "18px 20px 20px", flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+
+        {/* Logo + name row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: compact ? 40 : 48, height: compact ? 40 : 48,
+            borderRadius: 12, flexShrink: 0,
+            background: `linear-gradient(135deg, hsl(${hue},55%,42%), hsl(${(hue+40)%360},55%,52%))`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800,
+            fontSize: compact ? 13 : 15, color: "white", letterSpacing: "0.5px",
+          }}>
+            {initials(t.name)}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: "'Space Grotesk',sans-serif",
+              fontSize: compact ? 13.5 : 14.5,
+              fontWeight: 700, color: "#1a2a4a",
+              lineHeight: 1.25,
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+            }}>{t.name}</div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1C3.3 1 2 2.3 2 4c0 2 3 5.5 3 5.5S8 6 8 4c0-1.7-1.3-3-3-3Z" fill="#9CA3AF"/><circle cx="5" cy="4" r="1.2" fill="white"/></svg>
+              Zone {t.zone}, Lot {t.lot}
+              {t.active && <span style={{ display: "flex", alignItems: "center", gap: 3, marginLeft: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981", animation: "pulse 2s infinite", display: "block" }}/>
+                <span style={{ color: "#10B981", fontWeight: 600 }}>Trading</span>
+              </span>}
+            </div>
+          </div>
+          {t.isNew && (
+            <span style={{ background: `${accent}15`, color: accent, fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, flexShrink: 0, letterSpacing: "0.3px" }}>NEW</span>
+          )}
+        </div>
+
+        {/* Industry + capability tags */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ background: ic.bg, color: ic.text, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20 }}>{t.industry}</span>
+          <span style={{ background: "#F1F4FA", color: "#6B7280", fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 20 }}>{t.cap}</span>
+        </div>
+
+        {/* Products */}
+        {!compact && t.products !== "—" && (
+          <div style={{ fontSize: 12.5, color: "#6B7280", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+            {t.products}
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div style={{ display: "flex", gap: 16, paddingTop: 10, borderTop: "1px solid #F1F4FA", marginTop: "auto" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 16, fontWeight: 700, color: "#1a2a4a" }}>{t.listings}</div>
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600 }}>listings</div>
+          </div>
+          <div style={{ width: 1, background: "#F1F4FA" }}/>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 16, fontWeight: 700, color: "#1a2a4a" }}>{t.tx}</div>
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600 }}>transactions</div>
+          </div>
+          <div style={{ flex: 1 }}/>
+          <button style={{
+            background: hov ? primary : `${primary}12`,
+            color: hov ? "white" : primary,
+            border: "none", borderRadius: 8,
+            padding: "7px 14px", fontSize: 12.5, fontWeight: 700,
+            cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif",
+            transition: "all 0.18s", flexShrink: 0, alignSelf: "center",
+          }}>View Profile</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Filter dropdown ──────────────────────────────────────────────────────
+function FilterDropdown({ label, options, value, onChange, primary }) {
+  const [open, setOpen] = useState(false);
+  const isActive = value !== "All";
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "9px 14px", borderRadius: 10,
+          border: `1.5px solid ${isActive ? primary : "#E2E8F0"}`,
+          background: isActive ? `${primary}10` : "white",
+          color: isActive ? primary : "#374151",
+          fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+          fontFamily: "'Plus Jakarta Sans',sans-serif",
+          transition: "all 0.15s", whiteSpace: "nowrap",
+        }}
+      >
+        {label}{isActive ? `: ${value}` : ""}
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0,
+          background: "white", borderRadius: 12, minWidth: 160,
+          boxShadow: "0 12px 36px rgba(0,0,0,0.14)", zIndex: 50,
+          padding: "6px 0", border: "1.5px solid #E2E8F0",
+          animation: "fadeUp 0.15s ease",
+        }}>
+          {["All", ...options].map(opt => (
+            <div key={opt} onClick={() => { onChange(opt); setOpen(false); }} style={{
+              padding: "9px 16px", fontSize: 13.5, cursor: "pointer",
+              fontWeight: opt === value ? 700 : 400,
+              color: opt === value ? primary : "#374151",
+              background: opt === value ? `${primary}08` : "transparent",
+              transition: "background 0.1s",
+            }}
+              onMouseOver={e => e.currentTarget.style.background = `${primary}08`}
+              onMouseOut={e => e.currentTarget.style.background = opt === value ? `${primary}08` : "transparent"}
+            >
+              {opt === "All" ? `All ${label}s` : opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const p = t.primaryColor;
+  const a = t.accentColor;
+
+  const [search, setSearch]   = useState("");
+  const [indFilter, setInd]   = useState("All");
+  const [zoneFilter, setZone] = useState("All");
+  const [capFilter, setCap]   = useState("All");
+  const [statFilter, setStat] = useState("All");
+  const [page, setPage]       = useState(1);
+
+  const perPage = t.perPage;
+
+  const filtered = useMemo(() => {
+    return ALL_TENANTS.filter(t => {
+      const q = search.toLowerCase();
+      if (q && !t.name.toLowerCase().includes(q) && !t.industry.toLowerCase().includes(q) && !t.products.toLowerCase().includes(q)) return false;
+      if (indFilter  !== "All" && t.industry !== indFilter)  return false;
+      if (zoneFilter !== "All" && t.zone     !== zoneFilter) return false;
+      if (capFilter  !== "All" && t.cap      !== capFilter)  return false;
+      if (statFilter === "Currently Trading" && !t.active)   return false;
+      if (statFilter === "New to Platform"   && !t.isNew)    return false;
+      return true;
+    });
+  }, [search, indFilter, zoneFilter, capFilter, statFilter]);
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const pageItems  = filtered.slice((page - 1) * perPage, page * perPage);
+
+  function resetFilters() {
+    setSearch(""); setInd("All"); setZone("All"); setCap("All"); setStat("All"); setPage(1);
+  }
+  const hasFilters = search || indFilter !== "All" || zoneFilter !== "All" || capFilter !== "All" || statFilter !== "All";
+
+  const INDUSTRY_OPTIONS = [...new Set(ALL_TENANTS.map(t => t.industry))].sort();
+
+  return (
+    <div style={{ minHeight: "100vh" }}>
+
+      {/* ── Navbar ── */}
+      <nav style={{ background: p, height: 60, display: "flex", alignItems: "center", padding: "0 32px", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 16px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <a href="VSG B2B Hub.html" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "5px 12px" }}
+            onMouseOver={e=>e.currentTarget.style.background="rgba(255,255,255,0.2)"}
+            onMouseOut={e=>e.currentTarget.style.background="rgba(255,255,255,0.12)"}
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M10 12.5L4.5 7.5l5.5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span style={{ color: "white", fontSize: 13, fontWeight: 600 }}>Marketplace</span>
+          </a>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: a, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" fill="white"/><rect x="11" y="2" width="7" height="7" rx="1.5" fill="white" opacity="0.6"/><rect x="2" y="11" width="7" height="7" rx="1.5" fill="white" opacity="0.6"/><rect x="11" y="11" width="7" height="7" rx="1.5" fill="white"/></svg>
+            </div>
+            <span style={{ color: "white", fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16 }}>VSG B2B Hub</span>
+          </div>
+        </div>
+        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: "white" }}>Tenant Directory</span>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <a href="#" style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, textDecoration: "none" }}>My Listings</a>
+          <a href="#" style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, textDecoration: "none" }}>Messages</a>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>TH</div>
+        </div>
+      </nav>
+
+      {/* ── Hero header ── */}
+      <div style={{ background: `linear-gradient(140deg, ${p} 0%, #0f5c4f 100%)`, padding: "36px 32px 40px", position: "relative", overflow: "hidden" }}>
+        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.06, pointerEvents: "none" }} xmlns="http://www.w3.org/2000/svg">
+          <defs><pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.3" fill="white"/></pattern></defs>
+          <rect width="100%" height="100%" fill="url(#dots)"/>
+        </svg>
+        <div style={{ maxWidth: 1180, margin: "0 auto", position: "relative" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", fontSize: 11.5, fontWeight: 700, padding: "3px 12px", borderRadius: 20, letterSpacing: "0.3px" }}>THAI HOA INDUSTRIAL PARK</span>
+              </div>
+              <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 34, fontWeight: 700, color: "white", letterSpacing: "-0.8px", marginBottom: 6 }}>Tenant Directory</h1>
+              <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 15 }}>102 manufacturers ready to connect, trade &amp; collaborate</p>
+            </div>
+            <div style={{ display: "flex", gap: 24 }}>
+              {[["102","Manufacturers"],["18","Industries"],["4","Zones"],["₫8.4B","Monthly Volume"]].map(([v,l])=>(
+                <div key={l} style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 700, color: "white" }}>{v}</div>
+                  <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search + filters ── */}
+      <div style={{ background: "white", borderBottom: "1px solid #E2E8F0", padding: "18px 32px", position: "sticky", top: 60, zIndex: 90, boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          {/* Search */}
+          <div style={{ display: "flex", alignItems: "center", flex: "1 1 280px", background: "#F8FAFF", border: "1.5px solid #E2E8F0", borderRadius: 12, padding: "0 14px", gap: 8 }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: "#9CA3AF", flexShrink: 0 }}>
+              <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search by company name, product, or industry…"
+              style={{ flex: 1, border: "none", outline: "none", fontSize: 14, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "transparent", color: "#1a2a4a", padding: "11px 0" }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 16, lineHeight: 1 }}>×</button>
+            )}
+          </div>
+
+          {/* Filter dropdowns */}
+          <FilterDropdown label="Industry" options={INDUSTRY_OPTIONS} value={indFilter} onChange={v=>{setInd(v);setPage(1);}} primary={p} />
+          <FilterDropdown label="Zone" options={["A","B","C","D"]} value={zoneFilter} onChange={v=>{setZone(v);setPage(1);}} primary={p} />
+          <FilterDropdown label="Capability" options={["Supplier","Buyer","Service Provider"]} value={capFilter} onChange={v=>{setCap(v);setPage(1);}} primary={p} />
+          <FilterDropdown label="Status" options={["Currently Trading","New to Platform"]} value={statFilter} onChange={v=>{setStat(v);setPage(1);}} primary={p} />
+
+          {hasFilters && (
+            <button onClick={resetFilters} style={{ padding: "9px 14px", border: "none", background: "#FEF2F2", color: "#DC2626", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", whiteSpace: "nowrap" }}>
+              ✕ Clear all
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 32px" }}>
+
+        {/* Results bar */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ fontSize: 14, color: "#6B7280" }}>
+            Showing <strong style={{ color: "#1a2a4a" }}>{(page-1)*perPage+1}–{Math.min(page*perPage, filtered.length)}</strong> of <strong style={{ color: "#1a2a4a" }}>{filtered.length}</strong> tenants
+            {hasFilters && <span style={{ color: p, fontWeight: 600 }}> (filtered)</span>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: "#9CA3AF" }}>View:</span>
+            <button onClick={() => setTweak("compactCards", false)} style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${!t.compactCards ? p : "#E2E8F0"}`, background: !t.compactCards ? `${p}10` : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: !t.compactCards ? p : "#9CA3AF" }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" fill="currentColor"/><rect x="8" y="1" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/><rect x="1" y="8" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/><rect x="8" y="8" width="5" height="5" rx="1" fill="currentColor"/></svg>
+            </button>
+            <button onClick={() => setTweak("compactCards", true)} style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${t.compactCards ? p : "#E2E8F0"}`, background: t.compactCards ? `${p}10` : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: t.compactCards ? p : "#9CA3AF" }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="2.5" rx="1" fill="currentColor"/><rect x="1" y="6" width="12" height="2.5" rx="1" fill="currentColor" opacity="0.5"/><rect x="1" y="10" width="12" height="2.5" rx="1" fill="currentColor" opacity="0.3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Grid */}
+        {pageItems.length > 0 ? (
+          <div style={{ display: "grid", gridTemplateColumns: t.compactCards ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 18 }}>
+            {pageItems.map((tenant, i) => (
+              <TenantCard key={tenant.name + i} t={tenant} primary={p} accent={a} compact={t.compactCards} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "64px 0", color: "#9CA3AF" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, color: "#374151", marginBottom: 8 }}>No tenants found</div>
+            <div style={{ fontSize: 14, marginBottom: 20 }}>Try adjusting your search or filters</div>
+            <button onClick={resetFilters} style={{ padding: "10px 24px", background: p, color: "white", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif" }}>Clear filters</button>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 36 }}>
+            <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1} style={{
+              width: 38, height: 38, borderRadius: 10, border: "1.5px solid #E2E8F0",
+              background: "white", cursor: page===1 ? "default" : "pointer",
+              color: page===1 ? "#D1D5DB" : "#374151", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i+1)
+              .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+              .reduce((acc, n, i, arr) => {
+                if (i > 0 && n - arr[i-1] > 1) acc.push("…");
+                acc.push(n); return acc;
+              }, [])
+              .map((item, i) => item === "…" ? (
+                <span key={"e"+i} style={{ width: 38, textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>…</span>
+              ) : (
+                <button key={item} onClick={() => setPage(item)} style={{
+                  width: 38, height: 38, borderRadius: 10,
+                  border: `1.5px solid ${page===item ? p : "#E2E8F0"}`,
+                  background: page===item ? p : "white",
+                  color: page===item ? "white" : "#374151",
+                  fontWeight: page===item ? 700 : 400,
+                  fontSize: 14, cursor: "pointer",
+                  fontFamily: "'Space Grotesk',sans-serif",
+                  transition: "all 0.15s",
+                }}>{item}</button>
+              ))
+            }
+
+            <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages} style={{
+              width: 38, height: 38, borderRadius: 10, border: "1.5px solid #E2E8F0",
+              background: "white", cursor: page===totalPages ? "default" : "pointer",
+              color: page===totalPages ? "#D1D5DB" : "#374151", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+
+            <span style={{ marginLeft: 8, fontSize: 13, color: "#9CA3AF" }}>Page {page} of {totalPages}</span>
+          </div>
+        )}
+      </div>
+
+      <TweaksPanel>
+        <TweakSection label="Colors" />
+        <TweakColor label="Primary Green" value={t.primaryColor} onChange={v => setTweak("primaryColor", v)} />
+        <TweakColor label="Accent Orange" value={t.accentColor} onChange={v => setTweak("accentColor", v)} />
+        <TweakSection label="Layout" />
+        <TweakSlider label="Cards per page" value={t.perPage} min={6} max={18} step={3} onChange={v => { setTweak("perPage", v); setPage(1); }} />
+        <TweakToggle label="Compact cards" value={t.compactCards} onChange={v => setTweak("compactCards", v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
