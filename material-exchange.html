@@ -4000,6 +4000,30 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
-
-
+<script>
+// VSG B2B Hub Navigation Fix
+document.addEventListener('DOMContentLoaded', function() {
+  const navLinks = {
+    'Marketplace': 'index.html',
+    'My Listings': 'post-listing.html',
+    'Messages': 'index.html#messages',
+    'Analytics': 'admin-dashboard.html',
+    'TH': 'tenant-directory.html'
+  };
+  
+  const allText = document.querySelectorAll('text, span, div, a');
+  
+  allText.forEach(element => {
+    const text = element.textContent.trim();
+    
+    if (navLinks[text]) {
+      element.style.cursor = 'pointer';
+      element.addEventListener('click', function(e) {
+        e.preventDefault();
+        window.location.href = navLinks[text];
+      });
+    }
+  });
+});
+</script>
 </body></html>
